@@ -1,0 +1,13 @@
+{
+  "name": "gestor-iot-root",
+  "version": "1.0.0",
+  "description": "Script unificado para iniciar el frontend y backend al mismo tiempo",
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd gestor-iot-backend && go run .",
+    "frontend": "cd gestor-iot-frontend && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
