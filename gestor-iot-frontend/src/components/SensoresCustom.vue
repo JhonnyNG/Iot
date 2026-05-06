@@ -334,6 +334,11 @@ onUnmounted(() => clearInterval(pollInterval))
 }
 .custom-select:focus { outline: none; border-color: var(--primary); }
 
+.custom-select option {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+}
+
 .divider { border: none; border-top: 1px solid var(--border-color); }
 
 .campos-list { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -361,6 +366,10 @@ onUnmounted(() => clearInterval(pollInterval))
   padding: 0.5rem 0.3rem;
   border-radius: 8px;
   font-size: 0.75rem;
+}
+.tipo-select option {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
 }
 .btn-remove {
   background: rgba(239,68,68,0.1); border: none; color: #ef4444;
