@@ -7,13 +7,29 @@ import 'jspdf-autotable'
 const activos = ref([])
 const isLoading = ref(true)
 const showModal = ref(false)
+const showCreateModal = ref(false)
+const showDeleteModal = ref(false)
 const searchQuery = ref('')
+
 const modalData = ref({
   id_activo: null,
   nombre: '',
   tipo: 'entrada',
   cantidad: 1,
-  id_usuario: 1 // Usuario por defecto para prueba
+  id_usuario: 1
+})
+
+const createFormData = ref({
+  nombre: '',
+  stock_actual: 0,
+  stock_minimo: 0,
+  umbral_temperatura: 25,
+  umbral_humedad: 60
+})
+
+const deleteData = ref({
+  id_activo: null,
+  nombre: ''
 })
 
 const fetchActivos = async () => {
@@ -74,17 +90,14 @@ const exportToPDF = () => {
   
   const doc = new jsPDF()
   
-  // Título
   doc.setFontSize(18)
   doc.setTextColor(40, 40, 40)
   doc.text("Reporte de Inventario IoT", 14, 22)
   
-  // Subtítulo / Fecha
   doc.setFontSize(11)
   doc.setTextColor(100, 100, 100)
   doc.text(`Generado el: ${new Date().toLocaleString()}`, 14, 30)
   
-  // Tabla
   const headers = [["ID", "Nombre", "Stock Actual", "Mínimo", "Umbrales"]]
   const data = activos.value.map(a => [
     `#${a.id_activo}`,
@@ -116,6 +129,23 @@ const openModal = (activo, tipo) => {
   showModal.value = true
 }
 
+const openCreateModal = () => {
+  createFormData.value = {
+    nombre: '',
+    stock_actual: 0,
+    stock_minimo: 0,
+    umbral_temperatura: 25,
+    umbral_humedad: 60
+  }
+  showCreateModal.value = true
+}
+
+const openDeleteModal = (activo) => {
+  deleteData.value.id_activo = activo.id_activo
+  deleteData.value.nombre = activo.nombre
+  showDeleteModal.value = true
+}
+
 const registrarMovimiento = async () => {
   try {
     const res = await fetch('http://localhost:8080/api/movimiento', {
@@ -135,10 +165,57 @@ const registrarMovimiento = async () => {
       fetchActivos()
     } else {
       const errorData = await res.json()
-      showToast(errorData.error || "No hay stock suficiente", "warning")
+      showToast(errorData.error || "Error al registrar movimiento", "warning")
     }
   } catch (error) {
     console.error("Error al registrar movimiento:", error)
+    showToast("Error de conexión al servidor", "error")
+  }
+}
+
+const crearActivo = async () => {
+  if (!createFormData.value.nombre.trim()) {
+    showToast("El nombre del activo es requerido", "warning")
+    return
+  }
+
+  try {
+    const res = await fetch('http://localhost:8080/api/activos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(createFormData.value)
+    })
+    
+    if (res.ok) {
+      showCreateModal.value = false
+      showToast("Activo creado exitosamente", "success")
+      fetchActivos()
+    } else {
+      const errorData = await res.json()
+      showToast(errorData.error || "Error al crear activo", "warning")
+    }
+  } catch (error) {
+    console.error("Error al crear activo:", error)
+    showToast("Error de conexión al servidor", "error")
+  }
+}
+
+const confirmarEliminar = async () => {
+  try {
+    const res = await fetch(`http://localhost:8080/api/activos/${deleteData.value.id_activo}`, {
+      method: 'DELETE'
+    })
+    
+    if (res.ok) {
+      showDeleteModal.value = false
+      showToast("Activo eliminado exitosamente", "success")
+      fetchActivos()
+    } else {
+      const errorData = await res.json()
+      showToast(errorData.error || "Error al eliminar activo", "warning")
+    }
+  } catch (error) {
+    console.error("Error al eliminar activo:", error)
     showToast("Error de conexión al servidor", "error")
   }
 }
@@ -167,6 +244,9 @@ onMounted(() => {
         </button>
         <button class="btn btn-primary" @click="fetchActivos">
           <i class="ph ph-arrows-clockwise"></i> Actualizar
+        </button>
+        <button class="btn btn-success" @click="openCreateModal">
+          <i class="ph ph-plus"></i> Nuevo Producto
         </button>
       </div>
     </div>
@@ -218,6 +298,9 @@ onMounted(() => {
                 <button class="btn-action btn-salida" @click="openModal(activo, 'salida')" title="Registrar Salida">
                   <i class="ph ph-minus"></i>
                 </button>
+                <button class="btn-action btn-delete" @click="openDeleteModal(activo)" title="Eliminar Producto">
+                  <i class="ph ph-trash"></i>
+                </button>
               </td>
             </tr>
             <tr v-if="filteredActivos.length === 0">
@@ -255,6 +338,71 @@ onMounted(() => {
         </div>
       </div>
     </Transition>
+
+    <!-- Modal para Crear Nuevo Activo -->
+    <Transition name="page">
+      <div v-if="showCreateModal" class="modal-backdrop">
+        <div class="modal glass-panel">
+          <div class="modal-header">
+            <h3>Crear Nuevo Producto</h3>
+            <button class="close-btn" @click="showCreateModal = false"><i class="ph ph-x"></i></button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Nombre del Producto *</label>
+              <input type="text" v-model="createFormData.nombre" placeholder="Ej: Sensor DHT22" class="input-field" />
+            </div>
+            <div class="form-group">
+              <label>Stock Inicial</label>
+              <input type="number" v-model="createFormData.stock_actual" min="0" class="input-field" />
+            </div>
+            <div class="form-group">
+              <label>Stock Mínimo</label>
+              <input type="number" v-model="createFormData.stock_minimo" min="0" class="input-field" />
+            </div>
+            <div class="form-group">
+              <label>Umbral de Temperatura (°C)</label>
+              <input type="number" v-model="createFormData.umbral_temperatura" step="0.1" placeholder="Ej: 25.0" class="input-field" />
+            </div>
+            <div class="form-group">
+              <label>Umbral de Humedad (%)</label>
+              <input type="number" v-model="createFormData.umbral_humedad" min="0" max="100" placeholder="Ej: 60" class="input-field" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" @click="showCreateModal = false">Cancelar</button>
+            <button class="btn btn-success" @click="crearActivo">
+              <i class="ph ph-plus"></i> Crear Producto
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Modal de Confirmación para Eliminar -->
+    <Transition name="page">
+      <div v-if="showDeleteModal" class="modal-backdrop">
+        <div class="modal glass-panel modal-danger">
+          <div class="modal-header">
+            <h3>Confirmar Eliminación</h3>
+            <button class="close-btn" @click="showDeleteModal = false"><i class="ph ph-x"></i></button>
+          </div>
+          <div class="modal-body">
+            <div class="delete-warning">
+              <i class="ph ph-warning-circle"></i>
+              <p>¿Está seguro que desea eliminar el producto <strong>"{{ deleteData.nombre }}"</strong>?</p>
+              <p class="text-muted small">Esta acción eliminará todos los datos asociados (telemetría, alertas, movimientos) y no se puede deshacer.</p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" @click="showDeleteModal = false">Cancelar</button>
+            <button class="btn btn-danger-solid" @click="confirmarEliminar">
+              <i class="ph ph-trash"></i> Eliminar Producto
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -265,6 +413,7 @@ onMounted(() => {
 .text-right { text-align: right; }
 .font-medium { font-weight: 500; }
 .text-muted { color: var(--text-muted); }
+.small { font-size: 0.875rem; }
 .w-full { width: 100%; }
 
 .header-section {
@@ -285,6 +434,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .search-box {
@@ -368,6 +518,8 @@ tr:hover td {
 .btn-entrada:hover { background: #059669; }
 .btn-salida { background: var(--warning); }
 .btn-salida:hover { background: #d97706; }
+.btn-delete { background: #7f1d1d; }
+.btn-delete:hover { background: #991b1b; }
 
 /* Modal Styles */
 .modal-backdrop {
@@ -386,8 +538,12 @@ tr:hover td {
 
 .modal {
   width: 100%;
-  max-width: 400px;
+  max-width: 450px;
   background: #1e293b;
+}
+
+.modal-danger {
+  max-width: 420px;
 }
 
 .modal-header {
@@ -409,6 +565,7 @@ tr:hover td {
   color: var(--text-muted);
   cursor: pointer;
   font-size: 1.25rem;
+  transition: color 0.2s;
 }
 
 .close-btn:hover { color: white; }
@@ -418,6 +575,29 @@ tr:hover td {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.delete-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.delete-warning i {
+  font-size: 2rem;
+  color: var(--danger);
+}
+
+.delete-warning p {
+  margin: 0;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.delete-warning p.text-muted {
+  font-size: 0.875rem;
+  color: var(--text-muted);
 }
 
 .form-group {
@@ -438,11 +618,23 @@ tr:hover td {
   background: rgba(0, 0, 0, 0.2);
   color: white;
   font-family: inherit;
+  font-size: 0.875rem;
+  transition: border-color 0.2s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--primary);
 }
 
 .input-field.disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.input-field::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
 }
 
 .modal-footer {
@@ -453,11 +645,32 @@ tr:hover td {
   gap: 0.75rem;
 }
 
+.btn-success {
+  background-color: #10b981;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #059669;
+  transform: translateY(-1px);
+}
+
 .btn-danger-solid {
   background: var(--danger);
   color: white;
 }
+
 .btn-danger-solid:hover {
   background: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* Transition animations */
+.page-enter-active, .page-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.page-enter-from, .page-leave-to {
+  opacity: 0;
 }
 </style>

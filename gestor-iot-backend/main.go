@@ -33,6 +33,8 @@ func main() {
 		api.GET("/alertas", ObtenerAlertas)
 		api.POST("/movimiento", RegistrarMovimiento)
 		api.GET("/activos", ListarActivos)
+		api.POST("/activos", CrearActivo)
+		api.DELETE("/activos/:id", EliminarActivo)
 	}
 
 	fmt.Println(" Servidor corriendo en http://localhost:8080")

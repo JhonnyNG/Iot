@@ -369,3 +369,102 @@ func ObtenerHistorialTelemetria(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resultados)
 }
+
+// POST /api/activos - Crear nuevo activo
+func CrearActivo(c *gin.Context) {
+	var req struct {
+		Nombre               string  `json:"nombre" binding:"required"`
+		StockActual          int     `json:"stock_actual" binding:"required,min=0"`
+		StockMinimo          int     `json:"stock_minimo" binding:"required,min=0"`
+		UmbralTemperatura    float64 `json:"umbral_temperatura"`
+		UmbralHumedad        float64 `json:"umbral_humedad"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos invalidos", "details": err.Error()})
+		return
+	}
+
+	var newID int
+	err := db.QueryRow(
+		`INSERT INTO activo (nombre, stock_actual, stock_minimo, umbral_temperatura, umbral_humedad) 
+         VALUES ($1, $2, $3, $4, $5) RETURNING id_activo`,
+		req.Nombre, req.StockActual, req.StockMinimo, req.UmbralTemperatura, req.UmbralHumedad,
+	).Scan(&newID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al crear activo", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Activo creado exitosamente",
+		"id_activo": newID,
+		"nombre": req.Nombre,
+	})
+}
+
+// DELETE /api/activos/:id - Eliminar activo
+func EliminarActivo(c *gin.Context) {
+	id := c.Param("id")
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID invalido"})
+		return
+	}
+
+	// Iniciar transacción para eliminar en cascada
+	tx, err := db.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al iniciar transacción"})
+		return
+	}
+	defer tx.Rollback()
+
+	// Verificar que el activo existe
+	var nombre string
+	err = tx.QueryRow("SELECT nombre FROM activo WHERE id_activo = $1", idInt).Scan(&nombre)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Activo no encontrado"})
+		return
+	}
+
+	// Eliminar telemetria relacionada
+	_, err = tx.Exec("DELETE FROM telemetria WHERE id_activo = $1", idInt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al eliminar datos relacionados"})
+		return
+	}
+
+	// Eliminar alertas relacionadas
+	_, err = tx.Exec("DELETE FROM alerta WHERE id_activo = $1", idInt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al eliminar alertas"})
+		return
+	}
+
+	// Eliminar movimientos relacionados
+	_, err = tx.Exec("DELETE FROM movimiento WHERE id_activo = $1", idInt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al eliminar movimientos"})
+		return
+	}
+
+	// Eliminar el activo
+	_, err = tx.Exec("DELETE FROM activo WHERE id_activo = $1", idInt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al eliminar activo"})
+		return
+	}
+
+	// Confirmar transacción
+	if err = tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al confirmar transacción"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Activo eliminado exitosamente",
+		"nombre": nombre,
+	})
+}
