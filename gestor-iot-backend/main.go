@@ -35,6 +35,9 @@ func main() {
 		api.GET("/activos", ListarActivos)
 		api.POST("/activos", CrearActivo)
 		api.DELETE("/activos/:id", EliminarActivo)
+		// Sensores custom NoSQL (JSONB flexible)
+		api.POST("/sensores/custom", RegistrarTelemetriaCustom)
+		api.GET("/sensores/custom/:id", ObtenerTelemetriaCustom)
 	}
 
 	fmt.Println(" Servidor corriendo en http://localhost:8080")

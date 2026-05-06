@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard.vue'
 import Inventario from './components/Inventario.vue'
 import Alertas from './components/Alertas.vue'
 import Ajustes from './components/Ajustes.vue'
+import SensoresCustom from './components/SensoresCustom.vue'
 import { toasts, removeToast } from './utils/toast.js'
 
 const isSidebarOpen = ref(true)
@@ -56,6 +57,10 @@ onUnmounted(() => clearInterval(timeInterval))
           <i class="ph ph-warning-circle"></i>
           <span v-if="isSidebarOpen">Alertas</span>
         </a>
+        <a href="#" class="nav-item" :class="{ active: currentView === 'sensores' }" @click.prevent="setView('sensores')">
+          <i class="ph ph-broadcast"></i>
+          <span v-if="isSidebarOpen">Sensores Custom</span>
+        </a>
         <a href="#" class="nav-item" :class="{ active: currentView === 'ajustes' }" @click.prevent="setView('ajustes')">
           <i class="ph ph-gear"></i>
           <span v-if="isSidebarOpen">Ajustes</span>
@@ -76,6 +81,7 @@ onUnmounted(() => clearInterval(timeInterval))
               <span v-if="currentView === 'dashboard'" key="dash">Resumen del Sistema</span>
               <span v-else-if="currentView === 'inventario'" key="inv">Inventario</span>
               <span v-else-if="currentView === 'alertas'" key="alt">Historial de Alertas</span>
+              <span v-else-if="currentView === 'sensores'" key="sen">Sensores NoSQL Custom</span>
               <span v-else-if="currentView === 'ajustes'" key="aju">Ajustes</span>
             </Transition>
           </h1>
@@ -102,6 +108,7 @@ onUnmounted(() => clearInterval(timeInterval))
           <Dashboard v-if="currentView === 'dashboard'" key="view-dashboard" />
           <Inventario v-else-if="currentView === 'inventario'" key="view-inventario" />
           <Alertas v-else-if="currentView === 'alertas'" key="view-alertas" />
+          <SensoresCustom v-else-if="currentView === 'sensores'" key="view-sensores" />
           <Ajustes v-else-if="currentView === 'ajustes'" key="view-ajustes" />
         </Transition>
       </div>

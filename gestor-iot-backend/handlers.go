@@ -468,3 +468,112 @@ func EliminarActivo(c *gin.Context) {
 		"nombre": nombre,
 	})
 }
+
+// POST /api/sensores/custom - Recibir telemetría de sensor desconocido (NoSQL flexible)
+func RegistrarTelemetriaCustom(c *gin.Context) {
+	// Parsear el body como mapa genérico para aceptar cualquier campo
+	var payload map[string]interface{}
+	if err := c.BindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "JSON inválido"})
+		return
+	}
+
+	// Extraer id_activo del payload (requerido)
+	idActivoRaw, ok := payload["id_activo"]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Falta el campo id_activo"})
+		return
+	}
+
+	// Convertir id_activo a int (puede llegar como float64 desde JSON)
+	var idActivo int
+	switch v := idActivoRaw.(type) {
+	case float64:
+		idActivo = int(v)
+	case int:
+		idActivo = v
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id_activo debe ser un número"})
+		return
+	}
+
+	// Verificar que el activo existe
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM activo WHERE id_activo = $1)", idActivo).Scan(&exists)
+	if err != nil || !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Activo no encontrado"})
+		return
+	}
+
+	// Eliminar id_activo del payload antes de guardar en JSONB
+	delete(payload, "id_activo")
+
+	// Serializar payload flexible a JSON para guardarlo en JSONB
+	datosBytes, err := json.Marshal(payload)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error serializando datos"})
+		return
+	}
+
+	// Insertar en telemetria usando el campo JSONB existente
+	_, err = db.Exec(`INSERT INTO telemetria (id_activo, datos, timestamp) VALUES ($1, $2, NOW())`,
+		idActivo, string(datosBytes))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al guardar telemetría custom"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "ok",
+		"message": "Telemetría custom registrada",
+		"campos":  len(payload),
+	})
+}
+
+// GET /api/sensores/custom/:id - Obtener últimas lecturas con TODOS los campos JSONB
+func ObtenerTelemetriaCustom(c *gin.Context) {
+	id := c.Param("id")
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+		return
+	}
+
+	// Obtener las últimas 20 lecturas con el JSONB completo
+	rows, err := db.Query(`
+        SELECT datos, TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS')
+        FROM telemetria
+        WHERE id_activo = $1
+        ORDER BY timestamp DESC
+        LIMIT 20
+    `, idInt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error consultando telemetría"})
+		return
+	}
+	defer rows.Close()
+
+	var resultados []map[string]interface{}
+	for rows.Next() {
+		var datosStr, timestamp string
+		if err := rows.Scan(&datosStr, &timestamp); err != nil {
+			continue
+		}
+
+		// Deserializar el JSONB en un mapa genérico
+		var datos map[string]interface{}
+		if err := json.Unmarshal([]byte(datosStr), &datos); err != nil {
+			continue
+		}
+
+		// Agregar el timestamp al resultado
+		datos["_timestamp"] = timestamp
+		resultados = append(resultados, datos)
+	}
+
+	if resultados == nil {
+		resultados = make([]map[string]interface{}, 0)
+	}
+
+	c.JSON(http.StatusOK, resultados)
+}
